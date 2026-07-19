@@ -1,6 +1,6 @@
 # AID configuration
 
-AID is configured with the help of a YAML configuration file. See the full syntax example in the [sample config](./config-example.yml).
+AID is configured with the help of a YAML configuration file. See the full syntax example in the [sample config](../../config.example.yml).
 
 Configuration keys:
 
