@@ -8,14 +8,19 @@ from calendar import monthrange
 from datetime import date
 from pathlib import Path
 
-from playwright.async_api import Download, Page, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 
 from aid.naming import format_invoice_name, unique_path
 
 logger = logging.getLogger(__name__)
 
-INVOICE_ROW = "table tbody tr, [data-testid='invoice-row'], .invoice-row, li"
-DOWNLOAD_LINK = "a:has-text('PDF'), a:has-text('Download'), a[href*='invoice']"
+# Billing page structure (see docs/specs/heroku/billing-page-sample.html):
+# month labels are submit buttons inside tr.invoice-row forms that POST
+# into a new tab (target=_blank). There is no PDF download control.
+INVOICE_ROW = "div.invoices table tr.invoice-row"
+MONTH_BUTTON = "td.invoice-title input[type='submit']"
+SHOW_MORE = "div.invoices button.show-more"
+
 MONTH_PATTERN = re.compile(
     r"(?P<month>January|February|March|April|May|June|July|August|September|"
     r"October|November|December|"
@@ -80,6 +85,61 @@ def month_overlaps(month_start: date, start: date, end: date) -> bool:
     return month_start <= end and month_end >= start
 
 
+async def _listed_months(page: Page) -> dict[date, int]:
+    """Map visible invoice months to their row index."""
+    rows = page.locator(INVOICE_ROW)
+    count = await rows.count()
+    listed: dict[date, int] = {}
+    for index in range(count):
+        button = rows.nth(index).locator(MONTH_BUTTON).first
+        if await button.count() == 0:
+            continue
+        label = (await button.get_attribute("value")) or (await button.inner_text())
+        invoice_month = parse_invoice_month(label.strip())
+        if invoice_month is not None and invoice_month not in listed:
+            listed[invoice_month] = index
+    return listed
+
+
+async def _expand_invoice_list(page: Page, target_months: set[date]) -> None:
+    """Click 'Show more' until target months are visible or no more history."""
+    while True:
+        listed = await _listed_months(page)
+        if target_months <= listed.keys():
+            return
+        show_more = page.locator(SHOW_MORE)
+        if await show_more.count() == 0 or not await show_more.is_visible():
+            return
+        previous_count = await page.locator(INVOICE_ROW).count()
+        await show_more.click()
+        try:
+            await page.wait_for_function(
+                "(prev) => document.querySelectorAll("
+                "'div.invoices table tr.invoice-row'"
+                ").length > prev",
+                arg=previous_count,
+                timeout=15_000,
+            )
+        except PlaywrightTimeoutError:
+            return
+
+
+async def _print_invoice_page(billing_page: Page, month_button, target: Path) -> None:
+    """Open the invoice popup and save it via Chromium print-to-PDF."""
+    async with billing_page.expect_popup(timeout=120_000) as popup_info:
+        await month_button.click()
+    invoice_page = await popup_info.value
+    try:
+        await invoice_page.wait_for_load_state("domcontentloaded")
+        try:
+            await invoice_page.wait_for_load_state("networkidle", timeout=60_000)
+        except PlaywrightTimeoutError:
+            logger.debug("Heroku invoice page did not reach networkidle; printing anyway")
+        await invoice_page.pdf(path=str(target), format="Letter", print_background=True)
+    finally:
+        await invoice_page.close()
+
+
 class HerokuService:
     """Download monthly invoice PDFs from the Heroku dashboard."""
 
@@ -105,36 +165,28 @@ class HerokuService:
         target_months = {
             m for m in months_in_range(start, end) if month_overlaps(m, start, end)
         }
-        rows = page.locator(INVOICE_ROW)
-        count = await rows.count()
+        await _expand_invoice_list(page, target_months)
+
+        listed = await _listed_months(page)
         saved: list[Path] = []
         found_months: set[date] = set()
+        rows = page.locator(INVOICE_ROW)
 
-        for index in range(count):
-            row = rows.nth(index)
-            text = (await row.inner_text()).strip()
-            invoice_month = parse_invoice_month(text)
-            if invoice_month is None or invoice_month not in target_months:
-                continue
-            if invoice_month in found_months:
+        for invoice_month in sorted(target_months):
+            index = listed.get(invoice_month)
+            if index is None:
                 continue
 
-            download_control = row.locator(DOWNLOAD_LINK).first
-            if await download_control.count() == 0:
-                download_control = row.get_by_role("link", name=re.compile("pdf|download", re.I))
-            if await download_control.count() == 0:
+            month_button = rows.nth(index).locator(MONTH_BUTTON).first
+            if await month_button.count() == 0:
                 raise RuntimeError(
                     f"Heroku invoice row for {invoice_month.strftime('%B %Y')} "
-                    "has no download control"
+                    "has no month link"
                 )
-
-            async with page.expect_download(timeout=120_000) as download_info:
-                await download_control.first.click()
-            download: Download = await download_info.value
 
             filename = format_invoice_name(name_format, invoice_month)
             target = unique_path(output_directory, filename)
-            await download.save_as(str(target))
+            await _print_invoice_page(page, month_button, target)
             saved.append(target)
             found_months.add(invoice_month)
             logger.info("Saved Heroku invoice %s", target)
