@@ -16,6 +16,50 @@ def test_load_example_config_enabled_services_only():
     assert [s.name for s in config.services] == ["aws", "heroku"]
     assert config.download_format == "%Y-%m-invoice.pdf"
     assert "Log in" in config.login_markers
+    by_name = {s.name: s for s in config.services}
+    assert by_name["aws"].dashboard_marker == "AWS estimated bill summary"
+    assert by_name["heroku"].dashboard_marker == "Billing Information"
+
+
+def test_dashboard_marker_optional(tmp_path: Path):
+    path = tmp_path / "config.yml"
+    path.write_text(
+        """
+services:
+  aws:
+    relative_date_range: last_quarter
+    output_directory: invoices/aws
+    login_url: https://example.com/login
+    dashboard_url: https://example.com/dash
+login_markers: []
+download:
+  format: "%Y-%m-invoice.pdf"
+""",
+        encoding="utf-8",
+    )
+    config = load_config(path, known_services=frozenset({"aws"}))
+    assert config.services[0].dashboard_marker is None
+
+
+def test_dashboard_marker_empty_rejected(tmp_path: Path):
+    path = tmp_path / "config.yml"
+    path.write_text(
+        """
+services:
+  aws:
+    relative_date_range: last_quarter
+    output_directory: invoices/aws
+    login_url: https://example.com/login
+    dashboard_url: https://example.com/dash
+    dashboard_marker: "   "
+login_markers: []
+download:
+  format: "%Y-%m-invoice.pdf"
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="dashboard_marker"):
+        load_config(path, known_services=frozenset({"aws"}))
 
 
 def test_enabled_false_skipped(tmp_path: Path):

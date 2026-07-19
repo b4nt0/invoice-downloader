@@ -22,6 +22,8 @@ Authentication probe is considered failed if one of the following conditions are
 
 2. The browser is redirected to a URL that does not match the `login_url`, but where the page title contains at least one string from the `login_markers`.
 
+3. If `dashboard_marker` text is specified but not present on the fully loaded dashboard page.
+
 In all other cases, the authentication probe is considered successful.
 
 #### When the authentication probe fails

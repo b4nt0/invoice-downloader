@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from playwright.async_api import Error as PlaywrightError
 
 from aid.auth import (
     AuthenticationError,
@@ -19,13 +20,14 @@ from aid.browser import urls_match_ignoring_query
 from aid.config import ServiceConfig
 
 
-def _service() -> ServiceConfig:
+def _service(*, dashboard_marker: str | None = None) -> ServiceConfig:
     return ServiceConfig(
         name="aws",
         relative_date_range="last_quarter",
         output_directory="invoices/aws",
         login_url="https://example.com/login",
         dashboard_url="https://example.com/dashboard",
+        dashboard_marker=dashboard_marker,
     )
 
 
@@ -70,6 +72,37 @@ async def test_probe_fails_on_title_marker():
     page.url = "https://example.com/sso"
     page.title = AsyncMock(return_value="AWS Sign in")
     assert not await probe_authentication(page, _service(), ["Sign in"])
+
+
+@pytest.mark.asyncio
+async def test_probe_fails_when_dashboard_marker_missing():
+    page = AsyncMock()
+    page.goto = AsyncMock()
+    page.url = "https://example.com/dashboard"
+    page.title = AsyncMock(return_value="Dashboard")
+    page.wait_for_load_state = AsyncMock()
+    page.wait_for_function = AsyncMock(side_effect=PlaywrightError("Timeout 5000ms"))
+    service = _service(dashboard_marker="AWS estimated bill summary")
+    assert not await probe_authentication(page, service, ["Sign in"])
+    page.wait_for_load_state.assert_awaited_once_with("load")
+    page.wait_for_function.assert_awaited_once()
+    assert page.wait_for_function.await_args.kwargs["timeout"] == 5_000
+
+
+@pytest.mark.asyncio
+async def test_probe_succeeds_when_dashboard_marker_present():
+    page = AsyncMock()
+    page.goto = AsyncMock()
+    page.url = "https://example.com/dashboard"
+    page.title = AsyncMock(return_value="Dashboard")
+    page.wait_for_load_state = AsyncMock()
+    page.wait_for_function = AsyncMock()
+    service = _service(dashboard_marker="AWS estimated bill summary")
+    assert await probe_authentication(page, service, ["Sign in"])
+    page.wait_for_function.assert_awaited_once()
+    assert page.wait_for_function.await_args.kwargs["arg"] == (
+        "AWS estimated bill summary"
+    )
 
 
 @pytest.mark.asyncio

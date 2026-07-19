@@ -30,6 +30,10 @@ The URL of the login page of the service.
 
 The URL of the dashboard that is the starting point for the service script.
 
+### `dashboard_marker`
+
+A text that, if specified, must be present on the dashboard page for the probe to be successful.
+
 ## `login_markers`
 
 A list of strings that is used by the [authentication flow](./download-flow.md) to detect a redirect to an authentication page.

@@ -58,6 +58,16 @@ async def probe_authentication(
     title = await page.title()
     if title_has_login_marker(title, login_markers):
         return False
+    if service.dashboard_marker is not None:
+        await page.wait_for_load_state("load")
+        try:
+            await page.wait_for_function(
+                "(marker) => document.documentElement.outerHTML.includes(marker)",
+                arg=service.dashboard_marker,
+                timeout=5_000,
+            )
+        except PlaywrightError:
+            return False
     return True
 
 

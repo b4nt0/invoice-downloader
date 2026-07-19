@@ -22,6 +22,7 @@ class ServiceConfig:
     output_directory: str
     login_url: str
     dashboard_url: str
+    dashboard_marker: str | None = None
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,15 @@ def _require_str(data: dict[str, Any], key: str, context: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ConfigError(f"Key '{key}' in {context} must be a non-empty string")
     return value
+
+
+def _optional_str(data: dict[str, Any], key: str, context: str) -> str | None:
+    if key not in data:
+        return None
+    value = data[key]
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"Key '{key}' in {context} must be a non-empty string")
+    return value.strip()
 
 
 def load_config(
@@ -110,6 +120,9 @@ def load_config(
                 login_url=_require_str(service_data, "login_url", f"service '{name}'"),
                 dashboard_url=_require_str(
                     service_data, "dashboard_url", f"service '{name}'"
+                ),
+                dashboard_marker=_optional_str(
+                    service_data, "dashboard_marker", f"service '{name}'"
                 ),
             )
         )

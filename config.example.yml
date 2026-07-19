@@ -5,12 +5,14 @@ services:
     output_directory: "invoices/aws"
     login_url: "https://aws.amazon.com/console/"
     dashboard_url: "https://us-east-1.console.aws.amazon.com/billing/home#/bills"
+    dashboard_marker: "AWS estimated bill summary"
   heroku:
     enabled: true
     relative_date_range: "last_quarter"
     output_directory: "invoices/heroku"
     login_url: "https://dashboard.heroku.com/login"
     dashboard_url: "https://dashboard.heroku.com/account/billing"
+    dashboard_marker: "Billing Information"
   google_cloud:
     enabled: false  # Reserved for future use
     relative_date_range: "last_quarter"
