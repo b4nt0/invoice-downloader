@@ -24,12 +24,13 @@ services:
     login_url: "https://openai.com/login"
     dashboard_url: "https://openai.com/invoices"
   google_ads:
-    enabled: false  # Reserved for future use
+    enabled: false
     relative_date_range: "last_quarter"
     output_directory: "invoices/google_ads"
-    login_url: "https://ads.google.com/login"
-    dashboard_url: "https://ads.google.com/invoices"
-  
+    login_url: "https://ads.google.com/"
+    dashboard_url: "https://ads.google.com/aw/billing/documents"
+    dashboard_marker: "Billing activity"
+
 login_markers:
   - "Log in"
   - "Sign in"

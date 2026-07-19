@@ -4,3 +4,4 @@ AID supports the following services:
 
 - AWS
 - Heroku
+- Google Ads

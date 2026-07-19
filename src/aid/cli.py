@@ -109,7 +109,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 def _cmd_debug(args: argparse.Namespace) -> int:
     logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
+        level=logging.DEBUG,
         format="%(levelname)s %(name)s: %(message)s",
     )
     options = RunOptions(

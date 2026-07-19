@@ -12,12 +12,12 @@ from playwright.async_api import Browser, BrowserContext, Page, Playwright
 from playwright.async_api import Error as PlaywrightError
 
 from aid.browser import (
+    is_login_url_redirect,
     launch_browser,
     new_context,
     new_page,
     save_storage_state,
     session_path,
-    urls_match_ignoring_query,
 )
 from aid.config import ServiceConfig
 from aid.debug import ActionTracer
@@ -51,12 +51,30 @@ async def probe_authentication(
     login_markers: list[str],
 ) -> bool:
     """Navigate to the dashboard and return True if still authenticated."""
+    logger.debug(
+        "Auth probe for '%s': navigating to dashboard %s",
+        service.name,
+        service.dashboard_url,
+    )
     await page.goto(service.dashboard_url, wait_until="domcontentloaded")
     current_url = page.url
-    if urls_match_ignoring_query(current_url, service.login_url):
+    if is_login_url_redirect(current_url, service.login_url, service.dashboard_url):
+        logger.debug(
+            "Auth probe for '%s' failed: redirected to login URL %s",
+            service.name,
+            current_url,
+        )
         return False
     title = await page.title()
     if title_has_login_marker(title, login_markers):
+        logger.debug(
+            "Auth probe for '%s' failed: redirected to a page whose title "
+            "matches a login marker (url=%s, title=%r, markers=%s)",
+            service.name,
+            current_url,
+            title,
+            login_markers,
+        )
         return False
     if service.dashboard_marker is not None:
         await page.wait_for_load_state("load")
@@ -67,7 +85,21 @@ async def probe_authentication(
                 timeout=5_000,
             )
         except PlaywrightError:
+            logger.debug(
+                "Auth probe for '%s' failed: dashboard marker %r not detected "
+                "on %s (title=%r)",
+                service.name,
+                service.dashboard_marker,
+                current_url,
+                title,
+            )
             return False
+    logger.debug(
+        "Auth probe for '%s' succeeded (url=%s, title=%r)",
+        service.name,
+        current_url,
+        title,
+    )
     return True
 
 

@@ -68,7 +68,36 @@ def url_without_query(url: str) -> str:
 
 
 def urls_match_ignoring_query(actual: str, expected: str) -> bool:
-    """Return True if *actual* matches *expected* ignoring query/fragment."""
+    """Return True if *actual* matches *expected* ignoring query/fragment.
+
+    Treats *expected* as a path prefix, so ``https://example.com/login/extra``
+    matches ``https://example.com/login``.
+    """
     actual_base = url_without_query(actual).rstrip("/")
     expected_base = url_without_query(expected).rstrip("/")
     return actual_base == expected_base or actual_base.startswith(expected_base + "/")
+
+
+def urls_match_exact_path_ignoring_query(actual: str, expected: str) -> bool:
+    """Return True if *actual* and *expected* share scheme, host, and path.
+
+    Query strings and fragments are ignored. Unlike
+    :func:`urls_match_ignoring_query`, a longer path does not match a shorter
+    prefix.
+    """
+    actual_base = url_without_query(actual).rstrip("/")
+    expected_base = url_without_query(expected).rstrip("/")
+    return actual_base == expected_base
+
+
+def is_login_url_redirect(current_url: str, login_url: str, dashboard_url: str) -> bool:
+    """Return True if *current_url* looks like a redirect to *login_url*.
+
+    Normally compares with path-prefix matching (query ignored). When
+    *login_url* is itself a prefix of *dashboard_url* (or equal under that
+    comparison), prefix matching would treat the dashboard as a login page, so
+    the check falls back to an exact path match instead.
+    """
+    if urls_match_ignoring_query(dashboard_url, login_url):
+        return urls_match_exact_path_ignoring_query(current_url, login_url)
+    return urls_match_ignoring_query(current_url, login_url)

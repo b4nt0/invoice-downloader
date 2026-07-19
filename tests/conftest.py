@@ -6,6 +6,7 @@ import pytest
 
 import aid.services as services
 from aid.services.aws import AwsService
+from aid.services.google_ads import GoogleAdsService
 from aid.services.heroku import HerokuService
 
 
@@ -18,3 +19,4 @@ def restore_service_registry():
     services._REGISTRY.update(original)
     services._REGISTRY.setdefault("aws", AwsService())
     services._REGISTRY.setdefault("heroku", HerokuService())
+    services._REGISTRY.setdefault("google_ads", GoogleAdsService())
