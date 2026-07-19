@@ -4,7 +4,7 @@ services:
     relative_date_range: "last_quarter"
     output_directory: "invoices/aws"
     login_url: "https://aws.amazon.com/console/"
-    dashboard_url: "https://console.aws.amazon.com/billing/home?#/reports/invoices"
+    dashboard_url: "https://us-east-1.console.aws.amazon.com/billing/home#/bills"
   heroku:
     enabled: true
     relative_date_range: "last_quarter"
