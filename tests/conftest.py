@@ -1,0 +1,20 @@
+"""Shared pytest fixtures."""
+
+from __future__ import annotations
+
+import pytest
+
+import aid.services as services
+from aid.services.aws import AwsService
+from aid.services.heroku import HerokuService
+
+
+@pytest.fixture(autouse=True)
+def restore_service_registry():
+    """Keep service registry stable across tests that call register_service."""
+    original = dict(services._REGISTRY)
+    yield
+    services._REGISTRY.clear()
+    services._REGISTRY.update(original)
+    services._REGISTRY.setdefault("aws", AwsService())
+    services._REGISTRY.setdefault("heroku", HerokuService())
