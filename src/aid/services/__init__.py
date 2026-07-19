@@ -5,6 +5,7 @@ from __future__ import annotations
 from aid.services.aws import AwsService
 from aid.services.base import ServiceModule
 from aid.services.google_ads import GoogleAdsService
+from aid.services.google_cloud import GoogleCloudService
 from aid.services.heroku import HerokuService
 from aid.services.openai import OpenAIService
 
@@ -12,6 +13,7 @@ _REGISTRY: dict[str, ServiceModule] = {
     "aws": AwsService(),
     "heroku": HerokuService(),
     "google_ads": GoogleAdsService(),
+    "google_cloud": GoogleCloudService(),
     "openai": OpenAIService(),
 }
 

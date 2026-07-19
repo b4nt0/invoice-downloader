@@ -14,11 +14,14 @@ EXAMPLE = Path(__file__).resolve().parents[1] / "config.example.yml"
 def test_load_example_config_enabled_services_only():
     config = load_config(
         EXAMPLE,
-        known_services=frozenset({"aws", "heroku", "openai", "google_ads"}),
+        known_services=frozenset(
+            {"aws", "heroku", "openai", "google_ads", "google_cloud"}
+        ),
     )
     assert [s.name for s in config.services] == [
         "aws",
         "heroku",
+        "google_cloud",
         "openai",
         "google_ads",
     ]
@@ -27,6 +30,7 @@ def test_load_example_config_enabled_services_only():
     by_name = {s.name: s for s in config.services}
     assert by_name["aws"].dashboard_marker == "AWS estimated bill summary"
     assert by_name["heroku"].dashboard_marker == "Billing Information"
+    assert by_name["google_cloud"].dashboard_marker == "Invoices"
     assert by_name["openai"].dashboard_marker == "Billing history"
     assert by_name["openai"].user_data_dir == ".aid/chrome-openai"
     assert by_name["openai"].browser_channel == "chrome"
@@ -187,10 +191,10 @@ def test_enabled_unknown_service(tmp_path: Path):
     path.write_text(
         """
 services:
-  google_cloud:
+  some_future_vendor:
     enabled: true
     relative_date_range: last_quarter
-    output_directory: invoices/gcp
+    output_directory: invoices/other
     login_url: https://example.com/login
     dashboard_url: https://example.com/dash
 login_markers: []

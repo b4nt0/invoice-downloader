@@ -14,11 +14,12 @@ services:
     dashboard_url: "https://dashboard.heroku.com/account/billing"
     dashboard_marker: "Billing Information"
   google_cloud:
-    enabled: false  # Reserved for future use
+    enabled: true
     relative_date_range: "last_quarter"
     output_directory: "invoices/google_cloud"
     login_url: "https://console.cloud.google.com/login"
-    dashboard_url: "https://console.cloud.google.com/billing/invoices"
+    dashboard_url: "https://console.cloud.google.com/billing/YOUR_BILLING_ACCOUNT_NUMBER/invoices"
+    dashboard_marker: "Invoices"
   openai:
     enabled: true
     relative_date_range: "last_quarter"
