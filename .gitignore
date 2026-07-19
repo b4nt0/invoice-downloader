@@ -221,3 +221,4 @@ __marimo__/
 .aid/
 invoices/
 config.yml
+.DS_Store
