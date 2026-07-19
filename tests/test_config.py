@@ -15,7 +15,14 @@ def test_load_example_config_enabled_services_only():
     config = load_config(
         EXAMPLE,
         known_services=frozenset(
-            {"aws", "heroku", "openai", "google_ads", "google_cloud"}
+            {
+                "aws",
+                "heroku",
+                "openai",
+                "google_ads",
+                "google_cloud",
+                "ing-zoomit",
+            }
         ),
     )
     assert [s.name for s in config.services] == [

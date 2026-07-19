@@ -38,6 +38,13 @@ services:
     login_url: "https://ads.google.com/"
     dashboard_url: "https://ads.google.com/aw/billing/documents"
     dashboard_marker: "Billing activity"
+  ing-zoomit:
+    enabled: false
+    relative_date_range: "last_quarter"
+    output_directory: "invoices/cc_statements/ing"
+    login_url: "https://ebanking.ing.be/login/"
+    dashboard_url: "https://ebanking.ing.be/banking/orders/zoomit"
+    dashboard_marker: "Zoomit"
   
 login_markers:
   - "Log in"

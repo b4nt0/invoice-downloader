@@ -7,6 +7,7 @@ from aid.services.base import ServiceModule
 from aid.services.google_ads import GoogleAdsService
 from aid.services.google_cloud import GoogleCloudService
 from aid.services.heroku import HerokuService
+from aid.services.ing_zoomit import IngZoomitService
 from aid.services.openai import OpenAIService
 
 _REGISTRY: dict[str, ServiceModule] = {
@@ -15,6 +16,7 @@ _REGISTRY: dict[str, ServiceModule] = {
     "google_ads": GoogleAdsService(),
     "google_cloud": GoogleCloudService(),
     "openai": OpenAIService(),
+    "ing-zoomit": IngZoomitService(),
 }
 
 

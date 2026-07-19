@@ -7,3 +7,4 @@ AID supports the following services:
 - Google Ads
 - Google Cloud
 - OpenAI
+- ING Zoomit (credit card statements)
