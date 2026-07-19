@@ -6,6 +6,8 @@ from pathlib import Path
 
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
+from aid.debug import ActionTracer
+
 SESSIONS_DIR = Path(".aid") / "sessions"
 
 
@@ -19,8 +21,16 @@ async def start_playwright() -> Playwright:
     return await async_playwright().start()
 
 
-async def launch_browser(playwright: Playwright, *, headless: bool) -> Browser:
-    return await playwright.chromium.launch(headless=headless)
+async def launch_browser(
+    playwright: Playwright,
+    *,
+    headless: bool,
+    slow_mo_ms: float = 0,
+) -> Browser:
+    kwargs: dict = {"headless": headless}
+    if slow_mo_ms:
+        kwargs["slow_mo"] = slow_mo_ms
+    return await playwright.chromium.launch(**kwargs)
 
 
 async def new_context(
@@ -35,8 +45,15 @@ async def new_context(
     return await browser.new_context(**kwargs)
 
 
-async def new_page(context: BrowserContext) -> Page:
-    return await context.new_page()
+async def new_page(
+    context: BrowserContext,
+    *,
+    tracer: ActionTracer | None = None,
+) -> Page:
+    page = await context.new_page()
+    if tracer is not None:
+        return tracer.instrument_page(page)
+    return page
 
 
 async def save_storage_state(context: BrowserContext, path: Path) -> None:

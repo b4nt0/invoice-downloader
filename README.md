@@ -23,6 +23,15 @@ aid run -c config.yml -v
 
 Session cookies are stored under `.aid/sessions/`. Invoice PDFs go to the `output_directory` paths from the config.
 
+### Debug mode
+
+```bash
+aid debug
+aid debug --slow-mo 500
+```
+
+Debug mode runs services one at a time with a visible browser, prints every Playwright action (and its result) from the orchestrator layer, and pauses before closing each browser so you can inspect the page.
+
 ## Specs
 
 Please find [the specs](./docs/specs/) in the `docs/specs` directory.

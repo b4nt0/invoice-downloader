@@ -20,6 +20,7 @@ from aid.browser import (
     urls_match_ignoring_query,
 )
 from aid.config import ServiceConfig
+from aid.debug import ActionTracer
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class AuthenticationError(RuntimeError):
 
 @dataclass
 class AuthenticatedSession:
-    """An authenticated headless browser session ready for download."""
+    """An authenticated browser session ready for download."""
 
     browser: Browser
     context: BrowserContext
@@ -101,12 +102,16 @@ async def interactive_login(
     session_file: Path,
     timeout_ms: float = 600_000,
     wait_for_enter_fn=wait_for_enter,
+    slow_mo_ms: float = 0,
+    tracer: ActionTracer | None = None,
 ) -> None:
     """Open a headed browser for the user to sign in, then persist the session."""
-    browser = await launch_browser(playwright, headless=False)
+    if tracer:
+        tracer.log("starting interactive login")
+    browser = await launch_browser(playwright, headless=False, slow_mo_ms=slow_mo_ms)
     try:
         context = await new_context(browser)
-        page = await new_page(context)
+        page = await new_page(context, tracer=tracer)
         await page.goto(service.login_url, wait_until="domcontentloaded")
         logger.info(
             "Interactive login for '%s': complete sign-in in the browser, "
@@ -120,6 +125,8 @@ async def interactive_login(
             wait_for_enter_fn=wait_for_enter_fn,
         )
         await save_storage_state(context, session_file)
+        if tracer:
+            tracer.log(f"saved session → {session_file}")
         logger.info("Saved session for '%s'", service.name)
     except PlaywrightError as exc:
         if "closed" in str(exc).lower():
@@ -143,11 +150,16 @@ async def authenticate(
     *,
     base: Path | None = None,
     allow_interactive: bool = True,
+    headed: bool = False,
+    slow_mo_ms: float = 0,
+    tracer: ActionTracer | None = None,
 ) -> AuthenticatedSession:
     """Authenticate a service: probe saved session, fall back to interactive once.
 
     Interactive authentication is attempted at most once per call. If the
     subsequent probe still fails, ``AuthenticationError`` is raised.
+
+    When *headed* is True (debug mode), probe/download browsers are visible.
     """
     session_file = session_path(service.name, base=base)
     interactive_used = False
@@ -157,19 +169,39 @@ async def authenticate(
             raise AuthenticationError(
                 f"No saved session for '{service.name}' and interactive login disabled"
             )
-        await interactive_login(playwright, service, session_file=session_file)
+        if tracer:
+            tracer.log("no saved session; launching interactive login")
+        await interactive_login(
+            playwright,
+            service,
+            session_file=session_file,
+            wait_for_enter_fn=wait_for_enter,
+            slow_mo_ms=slow_mo_ms,
+            tracer=tracer,
+        )
         interactive_used = True
 
-    browser = await launch_browser(playwright, headless=True)
+    if tracer:
+        tracer.log(
+            f"auth probe (headed={headed}) using session "
+            f"{'present' if session_file.is_file() else 'missing'}"
+        )
+    browser = await launch_browser(
+        playwright, headless=not headed, slow_mo_ms=slow_mo_ms
+    )
     context = await new_context(browser, storage_state=session_file)
-    page = await new_page(context)
+    page = await new_page(context, tracer=tracer)
 
     if await probe_authentication(page, service, login_markers):
         await save_storage_state(context, session_file)
+        if tracer:
+            tracer.log("auth probe succeeded")
         return AuthenticatedSession(
             browser=browser, context=context, page=page, service=service
         )
 
+    if tracer:
+        tracer.log("auth probe failed")
     await browser.close()
 
     if interactive_used or not allow_interactive:
@@ -178,19 +210,33 @@ async def authenticate(
             f"(interactive login already attempted or disabled)"
         )
 
-    await interactive_login(playwright, service, session_file=session_file)
+    await interactive_login(
+        playwright,
+        service,
+        session_file=session_file,
+        slow_mo_ms=slow_mo_ms,
+        tracer=tracer,
+    )
 
-    browser = await launch_browser(playwright, headless=True)
+    if tracer:
+        tracer.log(f"auth probe after interactive login (headed={headed})")
+    browser = await launch_browser(
+        playwright, headless=not headed, slow_mo_ms=slow_mo_ms
+    )
     context = await new_context(browser, storage_state=session_file)
-    page = await new_page(context)
+    page = await new_page(context, tracer=tracer)
 
     if not await probe_authentication(page, service, login_markers):
+        if tracer:
+            tracer.log("auth probe failed after interactive login")
         await browser.close()
         raise AuthenticationError(
             f"Authentication failed for '{service.name}' after interactive login"
         )
 
     await save_storage_state(context, session_file)
+    if tracer:
+        tracer.log("auth probe succeeded after interactive login")
     return AuthenticatedSession(
         browser=browser, context=context, page=page, service=service
     )

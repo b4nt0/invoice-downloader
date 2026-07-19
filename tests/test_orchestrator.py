@@ -176,6 +176,56 @@ async def test_auth_failure_recorded(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_debug_options_run_sequentially_and_pause(tmp_path: Path, monkeypatch):
+    events: list[str] = []
+    register_service("aws", FakeModule(events, "aws", delay=0.01))
+    register_service("heroku", FakeModule(events, "heroku", delay=0.01))
+
+    async def fake_authenticate(
+        playwright, service, login_markers, *, base=None, headed=False, **_
+    ):
+        events.append(f"auth:{service.name}:headed={headed}")
+        browser = AsyncMock()
+        browser.close = AsyncMock()
+        return AuthenticatedSession(
+            browser=browser,
+            context=AsyncMock(),
+            page=AsyncMock(),
+            service=service,
+        )
+
+    pauses: list[str] = []
+
+    async def fake_enter(*, prompt=None):
+        pauses.append(prompt or "")
+
+    monkeypatch.setattr("aid.orchestrator.wait_for_enter", fake_enter)
+    monkeypatch.setattr(
+        "aid.orchestrator.resolve_date_range",
+        lambda relative: DateRange(date(2026, 4, 1), date(2026, 6, 30)),
+    )
+
+    from aid.orchestrator import RunOptions
+
+    result = await run_orchestrator(
+        _config("aws", "heroku"),
+        base=tmp_path,
+        authenticate_fn=fake_authenticate,
+        playwright_factory=_fake_playwright_factory,
+        options=RunOptions(
+            headed=True,
+            trace_actions=False,
+            sequential=True,
+            pause_before_close=True,
+        ),
+    )
+    assert result.ok
+    assert events.index("auth:aws:headed=True") < events.index("auth:heroku:headed=True")
+    assert events.index("download_end:aws") < events.index("auth:heroku:headed=True")
+    assert len(pauses) == 2
+
+
+@pytest.mark.asyncio
 async def test_download_failure_does_not_break_other_service(tmp_path: Path, monkeypatch):
     events: list[str] = []
 
