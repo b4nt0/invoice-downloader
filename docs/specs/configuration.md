@@ -6,7 +6,7 @@ Configuration keys:
 
 ## `services`
 
-The `services` key contains configuration for individual services. Every service key is used to discover the relevant service module.
+The `services` key contains configuration for individual GUI services. Every service key is used to discover the relevant service module.
 
 ### `enabled`
 
@@ -43,6 +43,32 @@ Use this when the vendor keeps the session in profile storage that does not surv
 ### `browser_channel`
 
 Optional Playwright browser channel (for example `chrome`). Typically set together with `user_data_dir` so AID launches installed Google Chrome against that profile.
+
+## `api_services`
+
+The `api_services` key contains configuration for individual API services. Every service key is used to discover the relevant service module.
+
+### `enabled`
+
+Must be `true` for AID to use the service. Services that have their `enabled` set to `false` are ignored. The default value is `true`.
+
+### `tenant`
+
+An optional tenant string identifier.
+
+### `api_key`
+
+An optional service API key.
+
+### `output_directory`
+
+The directory relative to the script executable where the downloaded invoice files must be placed.
+
+### `relative_date_range`
+
+Invoice date interval relative to the current date. Currently only `last_quarter` value is supported.
+
+- `last_quarter` - the latest finished calendar quarter of the year. For example, Q2 is 1st of April till 30th of June, both dates includes.
 
 ## `login_markers`
 

@@ -29,8 +29,18 @@ class ServiceConfig:
 
 
 @dataclass(frozen=True)
+class ApiServiceConfig:
+    name: str
+    relative_date_range: str
+    output_directory: str
+    tenant: str | None = None
+    api_key: str | None = None
+
+
+@dataclass(frozen=True)
 class AppConfig:
     services: list[ServiceConfig]
+    api_services: list[ApiServiceConfig]
     login_markers: list[str]
     download_format: str
     path: Path
@@ -54,36 +64,35 @@ def _optional_str(data: dict[str, Any], key: str, context: str) -> str | None:
     return value.strip()
 
 
-def load_config(
-    path: Path | str,
+def _parse_enabled(service_data: dict[str, Any], name: str) -> bool:
+    enabled = service_data.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise ConfigError(f"Service '{name}': 'enabled' must be a boolean")
+    return enabled
+
+
+def _parse_relative_date_range(service_data: dict[str, Any], name: str) -> str:
+    relative_date_range = _require_str(
+        service_data, "relative_date_range", f"service '{name}'"
+    )
+    if relative_date_range not in SUPPORTED_DATE_RANGES:
+        raise ConfigError(
+            f"Service '{name}': unsupported relative_date_range "
+            f"'{relative_date_range}' (supported: "
+            f"{', '.join(sorted(SUPPORTED_DATE_RANGES))})"
+        )
+    return relative_date_range
+
+
+def _parse_gui_services(
+    services_raw: Any,
     *,
-    known_services: frozenset[str] | None = None,
-) -> AppConfig:
-    """Load YAML config and return enabled services only."""
-    config_path = Path(path)
-    if not config_path.is_file():
-        raise ConfigError(f"Config file not found: {config_path}")
-
-    with config_path.open(encoding="utf-8") as handle:
-        raw = yaml.safe_load(handle)
-
-    if not isinstance(raw, dict):
-        raise ConfigError("Config root must be a mapping")
-
-    services_raw = raw.get("services")
-    if not isinstance(services_raw, dict) or not services_raw:
-        raise ConfigError("'services' must be a non-empty mapping")
-
-    login_markers = raw.get("login_markers", [])
-    if not isinstance(login_markers, list) or not all(
-        isinstance(item, str) for item in login_markers
-    ):
-        raise ConfigError("'login_markers' must be a list of strings")
-
-    download = raw.get("download")
-    if not isinstance(download, dict):
-        raise ConfigError("'download' must be a mapping")
-    download_format = _require_str(download, "format", "download")
+    known_services: frozenset[str] | None,
+) -> list[ServiceConfig]:
+    if services_raw is None:
+        return []
+    if not isinstance(services_raw, dict):
+        raise ConfigError("'services' must be a mapping")
 
     enabled_services: list[ServiceConfig] = []
     for name, service_data in services_raw.items():
@@ -92,10 +101,7 @@ def load_config(
         if not isinstance(service_data, dict):
             raise ConfigError(f"Service '{name}' must be a mapping")
 
-        enabled = service_data.get("enabled", True)
-        if not isinstance(enabled, bool):
-            raise ConfigError(f"Service '{name}': 'enabled' must be a boolean")
-        if not enabled:
+        if not _parse_enabled(service_data, name):
             continue
 
         if known_services is not None and name not in known_services:
@@ -103,20 +109,10 @@ def load_config(
                 f"Service '{name}' is enabled but no service module is registered"
             )
 
-        relative_date_range = _require_str(
-            service_data, "relative_date_range", f"service '{name}'"
-        )
-        if relative_date_range not in SUPPORTED_DATE_RANGES:
-            raise ConfigError(
-                f"Service '{name}': unsupported relative_date_range "
-                f"'{relative_date_range}' (supported: "
-                f"{', '.join(sorted(SUPPORTED_DATE_RANGES))})"
-            )
-
         enabled_services.append(
             ServiceConfig(
                 name=name,
-                relative_date_range=relative_date_range,
+                relative_date_range=_parse_relative_date_range(service_data, name),
                 output_directory=_require_str(
                     service_data, "output_directory", f"service '{name}'"
                 ),
@@ -135,9 +131,91 @@ def load_config(
                 ),
             )
         )
+    return enabled_services
+
+
+def _parse_api_services(
+    api_services_raw: Any,
+    *,
+    known_api_services: frozenset[str] | None,
+) -> list[ApiServiceConfig]:
+    if api_services_raw is None:
+        return []
+    if not isinstance(api_services_raw, dict):
+        raise ConfigError("'api_services' must be a mapping")
+
+    enabled_services: list[ApiServiceConfig] = []
+    for name, service_data in api_services_raw.items():
+        if not isinstance(name, str):
+            raise ConfigError("API service keys must be strings")
+        if not isinstance(service_data, dict):
+            raise ConfigError(f"API service '{name}' must be a mapping")
+
+        if not _parse_enabled(service_data, name):
+            continue
+
+        if known_api_services is not None and name not in known_api_services:
+            raise ConfigError(
+                f"API service '{name}' is enabled but no service module is registered"
+            )
+
+        enabled_services.append(
+            ApiServiceConfig(
+                name=name,
+                relative_date_range=_parse_relative_date_range(service_data, name),
+                output_directory=_require_str(
+                    service_data, "output_directory", f"service '{name}'"
+                ),
+                tenant=_optional_str(service_data, "tenant", f"service '{name}'"),
+                api_key=_optional_str(service_data, "api_key", f"service '{name}'"),
+            )
+        )
+    return enabled_services
+
+
+def load_config(
+    path: Path | str,
+    *,
+    known_services: frozenset[str] | None = None,
+    known_api_services: frozenset[str] | None = None,
+) -> AppConfig:
+    """Load YAML config and return enabled services only."""
+    config_path = Path(path)
+    if not config_path.is_file():
+        raise ConfigError(f"Config file not found: {config_path}")
+
+    with config_path.open(encoding="utf-8") as handle:
+        raw = yaml.safe_load(handle)
+
+    if not isinstance(raw, dict):
+        raise ConfigError("Config root must be a mapping")
+
+    login_markers = raw.get("login_markers", [])
+    if not isinstance(login_markers, list) or not all(
+        isinstance(item, str) for item in login_markers
+    ):
+        raise ConfigError("'login_markers' must be a list of strings")
+
+    download = raw.get("download")
+    if not isinstance(download, dict):
+        raise ConfigError("'download' must be a mapping")
+    download_format = _require_str(download, "format", "download")
+
+    enabled_services = _parse_gui_services(
+        raw.get("services"), known_services=known_services
+    )
+    enabled_api_services = _parse_api_services(
+        raw.get("api_services"), known_api_services=known_api_services
+    )
+
+    if not enabled_services and not enabled_api_services:
+        raise ConfigError(
+            "At least one enabled service is required under 'services' or 'api_services'"
+        )
 
     return AppConfig(
         services=enabled_services,
+        api_services=enabled_api_services,
         login_markers=list(login_markers),
         download_format=download_format,
         path=config_path.resolve(),

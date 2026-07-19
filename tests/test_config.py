@@ -24,6 +24,7 @@ def test_load_example_config_enabled_services_only():
                 "ing-zoomit",
             }
         ),
+        known_api_services=frozenset({"chargebee"}),
     )
     assert [s.name for s in config.services] == [
         "aws",
@@ -32,6 +33,7 @@ def test_load_example_config_enabled_services_only():
         "openai",
         "google_ads",
     ]
+    assert config.api_services == []
     assert config.download_format == "%Y-%m-invoice.pdf"
     assert "Log in" in config.login_markers
     by_name = {s.name: s for s in config.services}
@@ -212,3 +214,142 @@ download:
     )
     with pytest.raises(ConfigError, match="no service module is registered"):
         load_config(path, known_services=frozenset({"aws", "heroku"}))
+
+
+def test_load_api_services(tmp_path: Path):
+    path = tmp_path / "config.yml"
+    path.write_text(
+        """
+services:
+  aws:
+    relative_date_range: last_quarter
+    output_directory: invoices/aws
+    login_url: https://example.com/login
+    dashboard_url: https://example.com/dash
+api_services:
+  chargebee:
+    tenant: acme
+    api_key: secret-key
+    output_directory: invoices/chargebee
+    relative_date_range: last_quarter
+login_markers: []
+download:
+  format: "%Y-%m-invoice.pdf"
+""",
+        encoding="utf-8",
+    )
+    config = load_config(
+        path,
+        known_services=frozenset({"aws"}),
+        known_api_services=frozenset({"chargebee"}),
+    )
+    assert [s.name for s in config.services] == ["aws"]
+    assert len(config.api_services) == 1
+    api = config.api_services[0]
+    assert api.name == "chargebee"
+    assert api.tenant == "acme"
+    assert api.api_key == "secret-key"
+    assert api.output_directory == "invoices/chargebee"
+    assert api.relative_date_range == "last_quarter"
+
+
+def test_api_service_enabled_false_skipped(tmp_path: Path):
+    path = tmp_path / "config.yml"
+    path.write_text(
+        """
+api_services:
+  chargebee:
+    enabled: false
+    tenant: acme
+    api_key: secret-key
+    output_directory: invoices/chargebee
+    relative_date_range: last_quarter
+  other:
+    tenant: other
+    api_key: key
+    output_directory: invoices/other
+    relative_date_range: last_quarter
+login_markers: []
+download:
+  format: "%Y-%m-invoice.pdf"
+""",
+        encoding="utf-8",
+    )
+    config = load_config(
+        path,
+        known_api_services=frozenset({"chargebee", "other"}),
+    )
+    assert config.services == []
+    assert [s.name for s in config.api_services] == ["other"]
+
+
+def test_api_only_config(tmp_path: Path):
+    path = tmp_path / "config.yml"
+    path.write_text(
+        """
+api_services:
+  chargebee:
+    tenant: acme
+    api_key: secret-key
+    output_directory: invoices/chargebee
+    relative_date_range: last_quarter
+login_markers: []
+download:
+  format: "%Y-%m-invoice.pdf"
+""",
+        encoding="utf-8",
+    )
+    config = load_config(path, known_api_services=frozenset({"chargebee"}))
+    assert config.services == []
+    assert [s.name for s in config.api_services] == ["chargebee"]
+
+
+def test_enabled_unknown_api_service(tmp_path: Path):
+    path = tmp_path / "config.yml"
+    path.write_text(
+        """
+api_services:
+  future_billing:
+    enabled: true
+    output_directory: invoices/future
+    relative_date_range: last_quarter
+login_markers: []
+download:
+  format: "%Y-%m-invoice.pdf"
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="no service module is registered"):
+        load_config(path, known_api_services=frozenset({"chargebee"}))
+
+
+def test_no_enabled_services_rejected(tmp_path: Path):
+    path = tmp_path / "config.yml"
+    path.write_text(
+        """
+services:
+  aws:
+    enabled: false
+    relative_date_range: last_quarter
+    output_directory: invoices/aws
+    login_url: https://example.com/login
+    dashboard_url: https://example.com/dash
+api_services:
+  chargebee:
+    enabled: false
+    tenant: acme
+    api_key: secret
+    output_directory: invoices/chargebee
+    relative_date_range: last_quarter
+login_markers: []
+download:
+  format: "%Y-%m-invoice.pdf"
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="At least one enabled service"):
+        load_config(
+            path,
+            known_services=frozenset({"aws"}),
+            known_api_services=frozenset({"chargebee"}),
+        )

@@ -12,10 +12,15 @@ from playwright.async_api import Playwright
 
 from aid.auth import AuthenticatedSession, AuthenticationError, authenticate, wait_for_enter
 from aid.browser import start_playwright
-from aid.config import AppConfig, ServiceConfig, load_config
+from aid.config import ApiServiceConfig, AppConfig, ServiceConfig, load_config
 from aid.dates import DateRange, resolve_date_range
 from aid.debug import ActionTracer
-from aid.services import get_service, known_service_names
+from aid.services import (
+    get_api_service,
+    get_service,
+    known_api_service_names,
+    known_service_names,
+)
 from aid.setup.dirs import ensure_output_dir
 
 logger = logging.getLogger(__name__)
@@ -203,6 +208,60 @@ async def _run_one_service(
         await _stop_quietly(playwright)
 
 
+async def _run_one_api_service(
+    service: ApiServiceConfig,
+    *,
+    name_format: str,
+    base: Path | None,
+    timeout_seconds: float,
+    options: RunOptions,
+) -> ServiceResult:
+    """Run download for one API service (no browser / interactive auth)."""
+    tracer = ActionTracer(service.name) if options.trace_actions else None
+    try:
+        if tracer:
+            tracer.log("service start")
+        date_range = resolve_date_range(service.relative_date_range)
+        output_directory = ensure_output_dir(service.output_directory, base=base)
+        module = get_api_service(service.name)
+        if tracer:
+            tracer.log(
+                f"download phase "
+                f"{date_range.start.isoformat()}..{date_range.end.isoformat()} "
+                f"→ {output_directory}"
+            )
+        paths = await asyncio.wait_for(
+            module.download(
+                date_range.start,
+                date_range.end,
+                output_directory,
+                name_format,
+                tenant=service.tenant,
+                api_key=service.api_key,
+            ),
+            timeout=timeout_seconds,
+        )
+        if tracer:
+            tracer.log(
+                "download phase finished → "
+                + (", ".join(str(path) for path in paths) if paths else "(no files)")
+            )
+        return ServiceResult(service=service.name, paths=paths)
+    except TimeoutError:
+        error = f"Download timed out after {timeout_seconds:.0f}s"
+        if tracer:
+            tracer.log(f"✗ download phase → {error}")
+        return ServiceResult(service=service.name, error=error)
+    except Exception as exc:  # noqa: BLE001 — isolate per-service failures
+        logger.exception("API service '%s' failed", service.name)
+        if tracer:
+            tracer.failure("service", exc)
+        return ServiceResult(service=service.name, error=str(exc))
+    finally:
+        if tracer:
+            tracer.log("service cleanup")
+
+
 async def run_orchestrator(
     config: AppConfig,
     *,
@@ -214,9 +273,11 @@ async def run_orchestrator(
 ) -> RunResult:
     """Run each service in isolation; authenticate serially, download in parallel.
 
-    Every service gets its own Playwright instance so a crash or browser teardown
+    GUI services get their own Playwright instance so a crash or browser teardown
     in one service cannot abort interactive auth or downloads in another.
     An auth lock keeps interactive login prompts sequential and in config order.
+
+    API services skip browser auth and start immediately with config credentials.
 
     When ``options.sequential`` is True (debug mode), services run one after
     another so headed browsers and console traces stay easy to follow.
@@ -225,7 +286,7 @@ async def run_orchestrator(
     factory = playwright_factory or start_playwright
     auth_lock = asyncio.Lock()
 
-    async def run_service(service: ServiceConfig) -> ServiceResult:
+    async def run_gui_service(service: ServiceConfig) -> ServiceResult:
         return await _run_one_service(
             service,
             login_markers=config.login_markers,
@@ -238,14 +299,31 @@ async def run_orchestrator(
             options=run_options,
         )
 
+    async def run_api_service(service: ApiServiceConfig) -> ServiceResult:
+        return await _run_one_api_service(
+            service,
+            name_format=config.download_format,
+            base=base,
+            timeout_seconds=download_timeout_seconds,
+            options=run_options,
+        )
+
     if run_options.sequential:
-        results = [await run_service(service) for service in config.services]
+        results: list[ServiceResult] = []
+        for service in config.services:
+            results.append(await run_gui_service(service))
+        for service in config.api_services:
+            results.append(await run_api_service(service))
         return RunResult(results=results)
 
     tasks = [
-        asyncio.create_task(run_service(service), name=f"aid:{service.name}")
+        asyncio.create_task(run_gui_service(service), name=f"aid:{service.name}")
         for service in config.services
     ]
+    tasks.extend(
+        asyncio.create_task(run_api_service(service), name=f"aid:{service.name}")
+        for service in config.api_services
+    )
     results = await asyncio.gather(*tasks) if tasks else []
     return RunResult(results=list(results))
 
@@ -256,5 +334,9 @@ async def run_from_path(
     base: Path | None = None,
     options: RunOptions | None = None,
 ) -> RunResult:
-    config = load_config(config_path, known_services=known_service_names())
+    config = load_config(
+        config_path,
+        known_services=known_service_names(),
+        known_api_services=known_api_service_names(),
+    )
     return await run_orchestrator(config, base=base, options=options)

@@ -16,6 +16,14 @@ The input to a service module is the date interval for which the invoices are re
 
 The output of a service module is a list of file paths where the invoice PDFs are downloaded.
 
+### Dashboard-based services
+
+Dashboard-based services use interactive GUI to download invoices. They are automated using Playwright.
+
+### API-based services
+
+API-based services use API to download invoices. They are automated using requests API.
+
 ## Setup scripts
 
 Setup scripts are miscellaneous scripts that deal with configuration files, output directories, and other matters that are required to run AID.

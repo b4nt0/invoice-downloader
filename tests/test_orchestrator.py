@@ -10,10 +10,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from aid.auth import AuthenticatedSession, AuthenticationError
-from aid.config import AppConfig, ServiceConfig
+from aid.config import ApiServiceConfig, AppConfig, ServiceConfig
 from aid.dates import DateRange
 from aid.orchestrator import run_orchestrator
-from aid.services import register_service
+from aid.services import register_api_service, register_service
 
 
 def _service(name: str) -> ServiceConfig:
@@ -26,9 +26,20 @@ def _service(name: str) -> ServiceConfig:
     )
 
 
-def _config(*names: str) -> AppConfig:
+def _api_service(name: str) -> ApiServiceConfig:
+    return ApiServiceConfig(
+        name=name,
+        relative_date_range="last_quarter",
+        output_directory=f"invoices/{name}",
+        tenant="acme",
+        api_key="test-key",
+    )
+
+
+def _config(*names: str, api_names: tuple[str, ...] = ()) -> AppConfig:
     return AppConfig(
         services=[_service(name) for name in names],
+        api_services=[_api_service(name) for name in api_names],
         login_markers=["Sign in"],
         download_format="%Y-%m-invoice.pdf",
         path=Path("config.yml"),
@@ -277,3 +288,104 @@ async def test_download_failure_does_not_break_other_service(tmp_path: Path, mon
     # Each service used an isolated Playwright instance.
     assert len(playwrights) == 2
     assert all(pw.stop.await_count == 1 for pw in playwrights)
+
+
+class FakeApiModule:
+    def __init__(self, events: list[str], name: str, delay: float = 0.05):
+        self.events = events
+        self.name = name
+        self.delay = delay
+
+    async def download(
+        self,
+        start,
+        end,
+        output_directory,
+        name_format,
+        *,
+        tenant,
+        api_key,
+    ):
+        self.events.append(f"api_download_start:{self.name}")
+        self.events.append(f"api_creds:{tenant}:{api_key}")
+        await asyncio.sleep(self.delay)
+        path = output_directory / f"{self.name}.pdf"
+        path.write_bytes(b"%PDF")
+        self.events.append(f"api_download_end:{self.name}")
+        return [path]
+
+
+@pytest.mark.asyncio
+async def test_api_service_runs_without_playwright(tmp_path: Path, monkeypatch):
+    events: list[str] = []
+    register_api_service("chargebee", FakeApiModule(events, "chargebee", delay=0.01))
+
+    playwright_calls = 0
+
+    async def tracking_factory() -> MagicMock:
+        nonlocal playwright_calls
+        playwright_calls += 1
+        return await _fake_playwright_factory()
+
+    async def fail_auth(*_args, **_kwargs):
+        raise AssertionError("GUI auth should not run for API-only config")
+
+    monkeypatch.setattr(
+        "aid.orchestrator.resolve_date_range",
+        lambda relative: DateRange(date(2026, 4, 1), date(2026, 6, 30)),
+    )
+
+    result = await run_orchestrator(
+        _config(api_names=("chargebee",)),
+        base=tmp_path,
+        authenticate_fn=fail_auth,
+        playwright_factory=tracking_factory,
+    )
+
+    assert result.ok
+    assert [r.service for r in result.results] == ["chargebee"]
+    assert playwright_calls == 0
+    assert events == [
+        "api_download_start:chargebee",
+        "api_creds:acme:test-key",
+        "api_download_end:chargebee",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_api_service_runs_alongside_gui(tmp_path: Path, monkeypatch):
+    events: list[str] = []
+    register_service("heroku", FakeModule(events, "heroku", delay=0.05))
+    register_api_service("chargebee", FakeApiModule(events, "chargebee", delay=0.01))
+
+    async def fake_authenticate(playwright, service, login_markers, *, base=None, **_):
+        events.append(f"auth_start:{service.name}")
+        await asyncio.sleep(0.02)
+        events.append(f"auth_end:{service.name}")
+        browser = AsyncMock()
+        browser.close = AsyncMock()
+        return AuthenticatedSession(
+            browser=browser,
+            context=AsyncMock(),
+            page=AsyncMock(),
+            service=service,
+        )
+
+    monkeypatch.setattr(
+        "aid.orchestrator.resolve_date_range",
+        lambda relative: DateRange(date(2026, 4, 1), date(2026, 6, 30)),
+    )
+
+    result = await run_orchestrator(
+        _config("heroku", api_names=("chargebee",)),
+        base=tmp_path,
+        authenticate_fn=fake_authenticate,
+        playwright_factory=_fake_playwright_factory,
+    )
+
+    assert result.ok
+    assert {r.service for r in result.results} == {"heroku", "chargebee"}
+    # API download can start before GUI auth finishes.
+    assert events.index("api_download_start:chargebee") < events.index("auth_end:heroku")
+    assert "api_download_end:chargebee" in events
+    assert "download_end:heroku" in events

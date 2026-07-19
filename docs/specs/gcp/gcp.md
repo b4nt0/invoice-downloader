@@ -1,5 +1,7 @@
 # Google Cloud
 
+GCP is a GUI-based service.
+
 Google Cloud billing has a variable URL depending on the billing account number.
 Set `dashboard_url` to
 `https://console.cloud.google.com/billing/<BILLING_ACCOUNT_ID>/invoices`.

@@ -8,3 +8,4 @@ AID supports the following services:
 - Google Cloud
 - OpenAI
 - ING Zoomit (credit card statements)
+- Chargebee (API)

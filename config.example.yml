@@ -46,6 +46,14 @@ services:
     dashboard_url: "https://ebanking.ing.be/banking/orders/zoomit"
     dashboard_marker: "Zoomit"
   
+api_services:
+  chargebee:
+    enabled: false
+    tenant: "your-tenant-id"
+    api_key: "your-api-key"
+    output_directory: "invoices/chargebee"
+    relative_date_range: "last_quarter"
+
 login_markers:
   - "Log in"
   - "Sign in"

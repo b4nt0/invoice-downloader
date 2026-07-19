@@ -1,5 +1,7 @@
 # ING Zoomit Credit Card Statements
 
+ING Zoomit is a GUI-based service.
+
 ING Zoomit provides downloadable banking documents. This module targets **credit
 card expenditure statements** only (subtitle `Credit card expenditure statement`),
 not other Zoomit bills.

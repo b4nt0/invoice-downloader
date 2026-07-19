@@ -4,17 +4,19 @@ The [orchestrator](./architecture.md) flow launches independent browser automati
 
 Every session goes through the authentication and download phases. The following phases are per service.
 
-## Authentication phase
+## GUI services
+
+### Authentication phase
 
 Interactive authentication is optional. It only kicks in if AID is not authenticated already.
 
 If there's a saved session, the orchestrator script immediately launches a headless browser that probes for authentication.
 
-### Authentication probe
+#### Authentication probe
 
 The orchestrator service restores the previously saved authenticated session. Then it tries to navigate to the `dashboard_url` of the service.
 
-#### Failure detection
+##### Failure detection
 
 Authentication probe is considered failed if one of the following conditions are met:
 
@@ -26,22 +28,22 @@ Authentication probe is considered failed if one of the following conditions are
 
 In all other cases, the authentication probe is considered successful.
 
-#### When the authentication probe fails
+##### When the authentication probe fails
 
 The orchestrator script stops the authentication probe session and falls back to the interactive authentication session.
 
-#### When the authentication probe succeeeds
+##### When the authentication probe succeeeds
 The orchestrator script stays in the headless session and passes control to the service script.
 
-### Interactive authentication
+#### Interactive authentication
 
 The orchestrator script launches an interactive browser, navigates it to the `login_url` of the service, collects the user authentication, and returns back to the authentication probe.
 
-### Infinite cycle prevention
+#### Infinite cycle prevention
 
 When the user cannot authenticate, the algorithm above can result in an infinite loop. To prevent it, AID tries interactive authentication not more than once per launch.
 
-## Download phase
+### Download phase
 
 As soon as the authentication probe passes, the orchestrator script makes sure that the download directory exists and passes control over the headless session to the service script.
 
@@ -53,8 +55,12 @@ It is the job of the service module to save the invoice files and handle possibl
 
 The orchestrator sets a timeout of `10` minutes for every download phase.
 
-## Services sequencing
+### Services sequencing
 
 The orchestrator sequences services in such a way that the user receives interactive authentication prompts for different services as soon as possible after the script start, but never in parallel, and always in order that they are specified in the configuration.
 
 This means that the orchestrator first makes sure that one service is authenticated before launching authentication for the next service. Orchestrator waits for the previous service successful authentication, but does not wait for the successful file download. Invoice downloads run in parallel.
+
+## API services
+
+API services do not have an interactive component. The orchestrateor collects input parameters (configuration and date interval, as well as file download parameters) and immediately passes them to the service module.

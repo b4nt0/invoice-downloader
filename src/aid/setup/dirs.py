@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aid.config import AppConfig, ServiceConfig
+from aid.config import ApiServiceConfig, AppConfig, ServiceConfig
 
 
 def ensure_output_dir(output_directory: str | Path, *, base: Path | None = None) -> Path:
@@ -17,12 +17,15 @@ def ensure_output_dir(output_directory: str | Path, *, base: Path | None = None)
 
 
 def ensure_output_dirs(
-    config: AppConfig | list[ServiceConfig],
+    config: AppConfig | list[ServiceConfig] | list[ApiServiceConfig],
     *,
     base: Path | None = None,
 ) -> list[Path]:
-    """Create output directories for every enabled service."""
-    services = config.services if isinstance(config, AppConfig) else config
+    """Create output directories for every enabled GUI and API service."""
+    if isinstance(config, AppConfig):
+        entries = [*config.services, *config.api_services]
+    else:
+        entries = config
     return [
-        ensure_output_dir(service.output_directory, base=base) for service in services
+        ensure_output_dir(service.output_directory, base=base) for service in entries
     ]
