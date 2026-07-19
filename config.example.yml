@@ -10,7 +10,7 @@ services:
     relative_date_range: "last_quarter"
     output_directory: "invoices/heroku"
     login_url: "https://dashboard.heroku.com/login"
-    dashboard_url: "https://dashboard.heroku.com/invoices"
+    dashboard_url: "https://dashboard.heroku.com/account/billing"
   google_cloud:
     enabled: false  # Reserved for future use
     relative_date_range: "last_quarter"
