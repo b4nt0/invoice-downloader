@@ -23,6 +23,9 @@ class ServiceConfig:
     login_url: str
     dashboard_url: str
     dashboard_marker: str | None = None
+    # When set, AID reuses this Chrome/Chromium profile instead of storage_state JSON.
+    user_data_dir: str | None = None
+    browser_channel: str | None = None
 
 
 @dataclass(frozen=True)
@@ -123,6 +126,12 @@ def load_config(
                 ),
                 dashboard_marker=_optional_str(
                     service_data, "dashboard_marker", f"service '{name}'"
+                ),
+                user_data_dir=_optional_str(
+                    service_data, "user_data_dir", f"service '{name}'"
+                ),
+                browser_channel=_optional_str(
+                    service_data, "browser_channel", f"service '{name}'"
                 ),
             )
         )

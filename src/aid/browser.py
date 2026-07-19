@@ -17,6 +17,14 @@ def session_path(service_name: str, *, base: Path | None = None) -> Path:
     return root / f"{service_name}.json"
 
 
+def resolve_user_data_dir(user_data_dir: str, *, base: Path | None = None) -> Path:
+    """Resolve a service ``user_data_dir`` relative to *base* (or cwd)."""
+    path = Path(user_data_dir)
+    if path.is_absolute():
+        return path
+    return (base or Path.cwd()) / path
+
+
 async def start_playwright() -> Playwright:
     return await async_playwright().start()
 
@@ -26,11 +34,37 @@ async def launch_browser(
     *,
     headless: bool,
     slow_mo_ms: float = 0,
+    channel: str | None = None,
 ) -> Browser:
     kwargs: dict = {"headless": headless}
     if slow_mo_ms:
         kwargs["slow_mo"] = slow_mo_ms
+    if channel:
+        kwargs["channel"] = channel
     return await playwright.chromium.launch(**kwargs)
+
+
+async def launch_persistent_context(
+    playwright: Playwright,
+    user_data_dir: Path,
+    *,
+    headless: bool,
+    slow_mo_ms: float = 0,
+    channel: str | None = None,
+    accept_downloads: bool = True,
+) -> BrowserContext:
+    """Launch Chromium/Chrome with an on-disk profile (cookies + localStorage)."""
+    user_data_dir.mkdir(parents=True, exist_ok=True)
+    kwargs: dict = {
+        "user_data_dir": str(user_data_dir),
+        "headless": headless,
+        "accept_downloads": accept_downloads,
+    }
+    if slow_mo_ms:
+        kwargs["slow_mo"] = slow_mo_ms
+    if channel:
+        kwargs["channel"] = channel
+    return await playwright.chromium.launch_persistent_context(**kwargs)
 
 
 async def new_context(
@@ -50,7 +84,7 @@ async def new_page(
     *,
     tracer: ActionTracer | None = None,
 ) -> Page:
-    page = await context.new_page()
+    page = context.pages[0] if context.pages else await context.new_page()
     if tracer is not None:
         return tracer.instrument_page(page)
     return page

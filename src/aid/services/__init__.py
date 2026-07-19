@@ -6,11 +6,13 @@ from aid.services.aws import AwsService
 from aid.services.base import ServiceModule
 from aid.services.google_ads import GoogleAdsService
 from aid.services.heroku import HerokuService
+from aid.services.openai import OpenAIService
 
 _REGISTRY: dict[str, ServiceModule] = {
     "aws": AwsService(),
     "heroku": HerokuService(),
     "google_ads": GoogleAdsService(),
+    "openai": OpenAIService(),
 }
 
 

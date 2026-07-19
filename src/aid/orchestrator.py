@@ -69,7 +69,12 @@ async def _close_quietly(session: AuthenticatedSession | None) -> None:
     if session is None:
         return
     try:
-        await session.browser.close()
+        await session.context.close()
+    except Exception:  # noqa: BLE001 — best-effort cleanup
+        pass
+    try:
+        if session.browser is not None:
+            await session.browser.close()
     except Exception:  # noqa: BLE001 — best-effort cleanup
         pass
 

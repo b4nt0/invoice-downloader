@@ -34,6 +34,16 @@ The URL of the dashboard that is the starting point for the service script.
 
 A text that, if specified, must be present on the dashboard page for the probe to be successful.
 
+### `user_data_dir`
+
+Optional path to a Chromium/Chrome user-data directory. When set, AID opens this profile for auth and download instead of restoring `.aid/sessions/<service>.json`.
+
+Use this when the vendor keeps the session in profile storage that does not survive Playwright `storage_state` export (see [OpenAI login](./openai/login.md)).
+
+### `browser_channel`
+
+Optional Playwright browser channel (for example `chrome`). Typically set together with `user_data_dir` so AID launches installed Google Chrome against that profile.
+
 ## `login_markers`
 
 A list of strings that is used by the [authentication flow](./download-flow.md) to detect a redirect to an authentication page.

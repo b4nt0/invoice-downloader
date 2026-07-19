@@ -12,13 +12,48 @@ EXAMPLE = Path(__file__).resolve().parents[1] / "config.example.yml"
 
 
 def test_load_example_config_enabled_services_only():
-    config = load_config(EXAMPLE, known_services=frozenset({"aws", "heroku"}))
-    assert [s.name for s in config.services] == ["aws", "heroku"]
+    config = load_config(
+        EXAMPLE,
+        known_services=frozenset({"aws", "heroku", "openai", "google_ads"}),
+    )
+    assert [s.name for s in config.services] == [
+        "aws",
+        "heroku",
+        "openai",
+        "google_ads",
+    ]
     assert config.download_format == "%Y-%m-invoice.pdf"
     assert "Log in" in config.login_markers
     by_name = {s.name: s for s in config.services}
     assert by_name["aws"].dashboard_marker == "AWS estimated bill summary"
     assert by_name["heroku"].dashboard_marker == "Billing Information"
+    assert by_name["openai"].dashboard_marker == "Billing history"
+    assert by_name["openai"].user_data_dir == ".aid/chrome-openai"
+    assert by_name["openai"].browser_channel == "chrome"
+    assert by_name["google_ads"].dashboard_marker == "Billing activity"
+
+
+def test_user_data_dir_optional(tmp_path: Path):
+    path = tmp_path / "config.yml"
+    path.write_text(
+        """
+services:
+  openai:
+    relative_date_range: last_quarter
+    output_directory: invoices/openai
+    login_url: https://example.com/login
+    dashboard_url: https://example.com/dash
+    user_data_dir: .aid/chrome-openai
+    browser_channel: chrome
+login_markers: []
+download:
+  format: "%Y-%m-invoice.pdf"
+""",
+        encoding="utf-8",
+    )
+    config = load_config(path, known_services=frozenset({"openai"}))
+    assert config.services[0].user_data_dir == ".aid/chrome-openai"
+    assert config.services[0].browser_channel == "chrome"
 
 
 def test_dashboard_marker_optional(tmp_path: Path):
