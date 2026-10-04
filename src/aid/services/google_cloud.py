@@ -12,7 +12,7 @@ from pathlib import Path
 
 from playwright.async_api import Frame, FrameLocator, Page, TimeoutError as PlaywrightTimeoutError
 
-from aid.naming import format_invoice_name, unique_path
+from aid.naming import format_invoice_name, record_missing_invoices, unique_path
 
 logger = logging.getLogger(__name__)
 
@@ -431,9 +431,15 @@ class GoogleCloudService:
             logger.info("Saved Google Cloud invoice %s", target)
 
         missing = sorted(target_months - found_months)
-        if missing:
-            labels = ", ".join(m.strftime("%Y-%m") for m in missing)
-            raise RuntimeError(f"Missing Google Cloud invoices for months: {labels}")
+        saved.extend(
+            record_missing_invoices(
+                missing,
+                directory=output_directory,
+                name_format=name_format,
+                service_label="Google Cloud invoice",
+                log=logger,
+            )
+        )
         if not saved:
             raise RuntimeError(
                 f"No Google Cloud invoices found in range "

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 
-from aid.naming import format_invoice_name
+from aid.naming import format_invoice_name, write_missing_invoice
 
 logger = logging.getLogger(__name__)
 
@@ -179,10 +179,14 @@ class OpenAIService:
 
         invoices = await _listed_invoices(page, start, end)
         if not invoices:
-            raise RuntimeError(
+            message = (
                 f"No OpenAI invoices found in range "
-                f"{start.isoformat()}..{end.isoformat()}"
+                f"{start.isoformat()}..{end.isoformat()}."
             )
+            logger.error(message)
+            return [
+                write_missing_invoice(output_directory, name_format, start, message)
+            ]
 
         saved: list[Path] = []
         for invoice in invoices:

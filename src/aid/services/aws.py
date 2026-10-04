@@ -10,7 +10,7 @@ from pathlib import Path
 
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 
-from aid.naming import format_invoice_name, unique_path
+from aid.naming import format_invoice_name, record_missing_invoices, unique_path
 
 logger = logging.getLogger(__name__)
 
@@ -304,9 +304,15 @@ class AwsService:
             logger.info("Saved AWS invoice %s", target)
 
         missing = sorted(set(target_months) - found_months)
-        if missing:
-            labels = ", ".join(m.strftime("%Y-%m") for m in missing)
-            raise RuntimeError(f"Missing AWS billing periods: {labels}")
+        saved.extend(
+            record_missing_invoices(
+                missing,
+                directory=output_directory,
+                name_format=name_format,
+                service_label="AWS billing period",
+                log=logger,
+            )
+        )
         if not saved:
             raise RuntimeError(
                 f"No AWS bills found in range {start.isoformat()}..{end.isoformat()}"

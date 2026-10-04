@@ -16,7 +16,7 @@ from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
-from aid.naming import format_invoice_name, unique_path
+from aid.naming import format_invoice_name, record_missing_invoices, unique_path
 
 logger = logging.getLogger(__name__)
 
@@ -368,11 +368,15 @@ class IngZoomitService:
             logger.info("Saved ING Zoomit statement %s", target)
 
         missing = sorted(target_months - found_months)
-        if missing:
-            labels = ", ".join(m.strftime("%Y-%m") for m in missing)
-            raise RuntimeError(
-                f"Missing ING Zoomit credit card statements for months: {labels}"
+        saved.extend(
+            record_missing_invoices(
+                missing,
+                directory=output_directory,
+                name_format=name_format,
+                service_label="ING Zoomit credit card statement",
+                log=logger,
             )
+        )
         if not saved:
             raise RuntimeError(
                 f"No ING Zoomit credit card statements found in range "
