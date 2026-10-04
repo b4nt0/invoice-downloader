@@ -16,20 +16,24 @@ from aid.naming import format_invoice_name, record_missing_invoices, unique_path
 
 logger = logging.getLogger(__name__)
 
-# Invoices page (see docs/specs/gcp/gcp.html + live Payments document center):
+# Invoices page (live Payments document center; see docs/specs/gcp/gcp.md):
 # the list lives in iframe[name=billing-iframeIframe]. There is no per-row
 # Download link. Open a row → Actions → Download → "Download documents"
 # pop-up form (temporary Payments iframe) → Download (PDF).
+# The invoice detail is a flyout. Its close control is .b3id-section-close.
+# Collapsing the flyout keeps the Actions button in the DOM (off-screen), so
+# "closed" means the flyout no longer has the expanded class.
 BILLING_IFRAME = 'iframe[name="billing-iframeIframe"]'
 DOCUMENT_ROW = "tr.b3id-widget-table-data-row"
 DOCUMENT_NUMBER_CELL = '[aria-label="Document number"]'
 FORM_DOWNLOAD_BUTTON = (
     '[role="button"].b3-primary-button:has-text("Download")'
 )
+EXPANDED_FLYOUT = ".b3-section.flyout.expanded"
 DETAIL_CLOSE = (
+    ".b3-section.flyout.expanded .b3id-section-close, "
     ".b3id-widget-component-close-icon, "
     ".b3-widget-component-close-icon, "
-    '[aria-label="Close"], '
     '[aria-label="Close dialog"]'
 )
 COOKIE_OK = 'button:has-text("OK, got it")'
@@ -244,15 +248,21 @@ async def _close_overlays(page: Page, frame: FrameLocator | None = None) -> None
         logger.debug("Parent download modal close skipped", exc_info=True)
 
     if frame is not None:
-        # Invoice detail panel close (X) inside the Payments iframe.
+        # Invoice detail flyout close (X) inside the Payments iframe.
+        # A normal click collapses it; force is only a fallback when the
+        # control sits on the iframe edge and fails hit-testing.
         detail_close = frame.locator(DETAIL_CLOSE)
         try:
             count = await detail_close.count()
             for index in range(count):
                 icon = detail_close.nth(index)
-                if await icon.is_visible():
+                if not await icon.is_visible():
+                    continue
+                try:
+                    await icon.click(timeout=3_000)
+                except Exception:
                     await icon.click(force=True, timeout=3_000)
-                    await page.wait_for_timeout(200)
+                await page.wait_for_timeout(200)
         except Exception:
             logger.debug("Invoice detail close icon click skipped", exc_info=True)
 
@@ -261,12 +271,12 @@ async def _close_overlays(page: Page, frame: FrameLocator | None = None) -> None
         await page.wait_for_timeout(250)
 
     if frame is not None:
-        # Detail is open when the Actions button is visible; wait for it to go away.
-        actions = frame.get_by_role("button", name="Actions")
+        # Collapsed flyouts leave the Actions button in the DOM, so wait until
+        # the expanded flyout itself is gone rather than until Actions is hidden.
         try:
-            await actions.wait_for(state="hidden", timeout=10_000)
+            await frame.locator(EXPANDED_FLYOUT).wait_for(state="hidden", timeout=5_000)
         except PlaywrightTimeoutError:
-            logger.debug("Invoice detail Actions button still visible after close attempts")
+            logger.debug("Invoice detail flyout still expanded after close attempts")
 
 
 async def _close_helper_pages(page: Page) -> None:
